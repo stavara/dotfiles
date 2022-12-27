@@ -51,7 +51,7 @@ terminal = guess_terminal()
 
 colorTaskBarQtile = "#161616"
 sizeBarQtile = 38
-fontQtile = "mononoki Nerd Font"
+fontQtile = "Caskaydia Cove Nerd Font"
 fontSizeQtile = 18
 
 keys = [
