@@ -33,6 +33,17 @@ from libqtile.config import Click, Drag, Group, Key, Match, Screen
 from libqtile.lazy import lazy
 from libqtile.utils import guess_terminal
 
+from libqtile import qtile
+
+def whereScreen(qtile, group_name):                                                
+    if group_name  == qtile.current_screen.group.name:                                
+        qtile.current_screen.set_group(qtile.current_screen.previous_group)     
+        return                                                                  
+    for i, group in enumerate(qtile.groups):                                    
+        if group_name == group.name:                                            
+            qtile.current_screen.set_group(qtile.groups[i])                     
+            return 
+
 mod = "mod4"
 terminal = guess_terminal()
 
@@ -118,7 +129,7 @@ for i, group in enumerate(groups):
             Key(
                 [mod],
                 zoneWork,
-                lazy.group[group.name].toscreen(),
+                lazy.function(whereScreen, group.name),
                 desc="Switch to group {}".format(group.name),
             ),
             # mod1 + shift + letter of group = switch to & move focused window to group
@@ -275,3 +286,7 @@ wmname = "LG3D"
 def autostart():
     home = os.path.expanduser('~')
     subprocess.Popen([home + '/.config/qtile/autostart.sh'])
+
+@hook.subscribe.startup_complete    
+def changeStartGroup():
+    qtile.current_screen.set_group(qtile.groups[1])
