@@ -28,12 +28,118 @@ import os
 import subprocess
 from libqtile import hook
 
+# custom cmus
+from functools import partial
+from libqtile import pangocffi
+from libqtile.widget import base
+
+class Cmus(base.ThreadPoolText):
+
+    defaults = [
+        ("play_color", "fc5f5c", "Text colour when playing."),
+        ("noplay_color", "6e7072", "Text colour when not playing."),
+        ("update_interval", 0.5, "Update Time in seconds."),
+    ]
+
+    def __init__(self, **config):
+        base.ThreadPoolText.__init__(self, "", **config)
+        self.add_defaults(Cmus.defaults)
+        self.status = ""
+        self.local = None
+
+        self.add_callbacks(
+            {
+                "Button1": self.play,
+                "Button4": partial(subprocess.Popen, ["cmus-remote", "-n"]),
+                "Button5": partial(subprocess.Popen, ["cmus-remote", "-r"]),
+            }
+        )
+
+    def get_info(self):
+        """Return a dictionary with info about the current cmus status."""
+        try:
+            output = self.call_process(["cmus-remote", "-C", "status"])
+        except subprocess.CalledProcessError as err:
+            output = err.output
+        if output.startswith("status"):
+            output = output.splitlines()
+            info = {
+                "status": "",
+                "file": "",
+                "artist": "",
+                "album": "",
+                "title": "",
+                "stream": "",
+            }
+
+            for line in output:
+                for data in info:
+                    if data in line:
+                        index = line.index(data)
+                        if index < 5:
+                            info[data] = line[len(data) + index :].strip()
+                            break
+                    elif line.startswith("set"):
+                        return info
+            return info
+
+    def now_playing(self):
+        """Return a string with the now playing info (Artist - Song Title)."""
+        info = self.get_info()
+        now_playing = ""
+        if info:
+            status = info["status"]
+            if self.status != status:
+                self.status = status
+                if self.status == "playing":
+                    self.layout.colour = self.play_color
+                else:
+                    self.layout.colour = self.noplay_color
+            self.local = info["file"].startswith("/")
+            title = info["title"]
+            if self.local:
+                artist = info["artist"]
+                now_playing = "{0} - {1}".format(artist, title)
+                if now_playing == " - ":
+                    file_path = info["file"]
+                    file_path = file_path.split("/")[-1]
+                    now_playing = file_path
+            else:
+                if info["stream"]:
+                    now_playing = info["stream"]
+                else:
+                    now_playing = title
+            if now_playing:
+                now_playing = "{0}".format(now_playing)
+        return pangocffi.markup_escape_text(now_playing)
+
+    def play(self):
+        """Play music if stopped, else toggle pause."""
+        if self.status in ("playing", "paused"):
+            subprocess.Popen(["cmus-remote", "-u"])
+        elif self.status == "stopped":
+            subprocess.Popen(["cmus-remote", "-p"])
+
+    def poll(self):
+        """Poll content for the text box."""
+        return self.now_playing()
+
+#
+
+
 from libqtile import bar, layout, widget
-from libqtile.config import Click, Drag, Group, Key, Match, Screen
+from libqtile.config import Click, Drag, Group, Key, Match, Screen, ScratchPad, DropDown
 from libqtile.lazy import lazy
 from libqtile.utils import guess_terminal
 
 from libqtile import qtile
+
+
+#custom imports
+
+
+
+
 
 def whereScreen(qtile, group_name):                                                
     if group_name  == qtile.current_screen.group.name:                                
@@ -45,7 +151,7 @@ def whereScreen(qtile, group_name):
             return 
 
 mod = "mod4"
-terminal = guess_terminal()
+terminal = "alacritty"
 
 # Mis configuraciones
 
@@ -65,8 +171,8 @@ keys = [
     # Key([mod], "space", lazy.layout.next(), desc="Move window focus to other window"),
     # Move windows between left/right columns or move up/down in current stack.
     # Moving out of range in Columns layout will create new column.
-    # Key([mod, "shift"], "h", lazy.layout.shuffle_left(), desc="Move window to the left"),
-    # Key([mod, "shift"], "l", lazy.layout.shuffle_right(), desc="Move window to the right"),
+    Key([mod, "shift"], "h", lazy.layout.shuffle_left(), desc="Move window to the left"),
+    Key([mod, "shift"], "l", lazy.layout.shuffle_right(), desc="Move window to the right"),
     Key([mod, "shift"], "j", lazy.layout.shuffle_down(), desc="Move window down"),
     Key([mod, "shift"], "k", lazy.layout.shuffle_up(), desc="Move window up"),
     # Grow windows. If current window is on the edge of screen and direction
@@ -104,6 +210,7 @@ keys = [
     Key([mod], "s", lazy.spawn("scrot")),
     Key([mod, "shift"], "s", lazy.spawn("scrot -s")),
     Key([mod, "shift"], "f", lazy.window.toggle_floating()),
+    Key([mod], "t", lazy.spawn(os.path.expanduser("~/.config/qtile/toggleKeyMaps.sh"))),
 ]
 
 #groups = [Group(i) for i in [
@@ -120,6 +227,15 @@ groups = [
     Group("misc", matches=[Match(wm_class=['Xephyr'])], layout="monadwide"),
 ]
 
+groups.append(ScratchPad('dev_scratch', [
+    DropDown('term', terminal, width=0.4, height=0.5, x=0.3, y=0.2, opacity=1),
+    DropDown('expl', 'thunar', width=0.4, height=0.5, x=0.3, y=0.2, opacity=1),
+]))
+
+keys.extend([
+    Key(["control"], "1", lazy.group['dev_scratch'].dropdown_toggle('term')),
+    Key(["control"], "2", lazy.group['dev_scratch'].dropdown_toggle('expl')),
+])
 
 for i, group in enumerate(groups):
     zoneWork = str(i+1)
@@ -147,19 +263,19 @@ for i, group in enumerate(groups):
     )
 
 layout_conf = {
-    'border_focus': '#a9b665',
+    'border_focus': '#d5d0c2',
     'border_normal': '#282828',
-    'border_width': 1,
-    'margin': 12
+    'border_width': 3,
+    'margin': 14,
 }
 
 layouts = [
     # layout.Columns(border_focus_stack=["#d75f5f", "#8f3d3d"], border_width=1),
     layout.Max(),
     # Try more layouts by unleashing below layouts.
-    # layout.Stack(num_stacks=2),
-    # layout.Bsp(),
-    # layout.Matrix(),
+    layout.Stack(num_stacks=2),
+    layout.Bsp(**layout_conf),
+    layout.Matrix(**layout_conf),
     layout.MonadTall(**layout_conf),
     layout.MonadWide(**layout_conf),
     # layout.RatioTile(),
@@ -178,6 +294,13 @@ extension_defaults = widget_defaults.copy()
 
 # this_screen_border=value
 
+
+# mouse callbacks
+
+def toggleFunction():
+    keymaps = os.path.expanduser('~/.config/qtile/toggleKeyMaps.sh')
+    subprocess.run([keymaps])
+
 screens = [
     Screen(
         top=bar.Bar(
@@ -187,7 +310,7 @@ screens = [
                     padding=10,
                 ),
                 widget.GroupBox(
-                    active="a3cdc3",
+                    active="4fcaee",
                     inactive="6e7073",
                     borderwidth=3,
                     highlight_method="text",
@@ -211,18 +334,44 @@ screens = [
                     padding=50,
                 ),
                 widget.WindowName(
-                    foreground="a9b665",
+                    foreground="a6e02e",
+                    max_chars = 20,
                 ),
-                widget.Systray(),
+		Cmus(
+	            fmt=" {}",
+		    fontsize=18,
+	            max_chars=20,
+                ),
                 widget.TextBox(
-                    text="  ",
+                    text="  墳 ",
                     fontsize=18,
                     padding=0,
-                    foreground="cdc0a9",
+                    foreground="6e7073",
+                ),
+                widget.Volume(
+                    foreground="ffc366",
+                ),
+                widget.TextBox(
+                    text="   ",
+                    fontsize=18,
+                    padding=0,
+                    foreground="6e7073",
+                    mouse_callbacks={'Button1': toggleFunction},
+                ),
+                widget.KeyboardLayout(
+                    foreground="ffc366",
+                    padding=10,
+                    mouse_callbacks={'Button1': toggleFunction},
+                ),
+                widget.TextBox(
+                    text="  ",
+                    fontsize=18,
+                    padding=0,
+                    foreground="6e7073",
                 ),
                 widget.Clock(
                     format="%a, %b %d %H:%M ",
-                    foreground="cdc0a9",
+                    foreground="ffc366",
                 ),
                 widget.Sep(
                     linewidth=0,
@@ -284,8 +433,8 @@ wmname = "LG3D"
 
 @hook.subscribe.startup_once
 def autostart():
-    home = os.path.expanduser('~')
-    subprocess.Popen([home + '/.config/qtile/autostart.sh'])
+    home = os.path.expanduser('~/.config/qtile/autostart.sh')
+    subprocess.Popen([home])
 
 @hook.subscribe.startup_complete    
 def changeStartGroup():
