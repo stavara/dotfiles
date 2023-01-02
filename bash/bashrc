@@ -1,0 +1,19 @@
+#
+# ~/.bashrc
+#
+
+# If not running interactively, don't do anything
+[[ $- != *i* ]] && return
+
+alias ls='lsd'
+alias cat='bat'
+alias tree='tree -C'
+alias ll='ls -l'
+alias :wq='exit'
+alias eclipse-e='eclipse & disown; exit'
+alias eclipse='eclipse & disown'
+
+PS1="\[\033[0;34m\](\[\033[1;35m\]\u\[\033[0;34m\])────(\[\033[1;32m\]\w\[\033[0;34m\])\[\033[1;36m\]\$ \[\033[0m\]"
+
+export PATH=~/eclipse/java-2022-12/eclipse:$PATH
+
